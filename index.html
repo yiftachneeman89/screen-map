@@ -68,28 +68,31 @@
       <div class="legend">
         <span><i class="lg-solid"></i>Tap opens</span>
         <span><i class="lg-dash"></i>Automatic</span>
-        <span><i class="lg-dot"></i>The button</span>
-        <label class="lg-toggle" id="sharedToggle" hidden><input type="checkbox" id="sharedCheck" checked> <span id="sharedLabel">Nav-bar arrows</span></label>
-        <span class="lg-hint">Hover a card or button · drag titles to move cards</span>
+        <label class="lg-toggle" id="sharedToggle" hidden><input type="checkbox" id="sharedCheck"> Bottom-bar arrows</label>
+        <span class="lg-hint">Click a screen to see it</span>
       </div>
       <div class="zoom-ctl">
         <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
         <span id="zoomPct">100%</span>
         <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
         <button id="fitBtn" title="Fit everything">Fit</button>
-        <button id="resetBtn" title="Put every card back in its automatic place">Tidy</button>
+        <button id="resetBtn" title="Put every box back in its automatic place" hidden>Reset layout</button>
       </div>
-      <div class="stats" id="stats"></div>
     </section>
 
     <section class="gallery-view" id="galleryView" hidden>
       <div class="gallery" id="gallery"></div>
     </section>
 
-    <aside class="panel" id="panel" hidden>
-      <button class="panel-close" id="panelClose" aria-label="Close">✕</button>
-      <div id="panelBody"></div>
-    </aside>
+    <div class="viewer" id="viewer" hidden>
+      <div class="viewer-card" id="viewerCard" role="dialog" aria-modal="true">
+        <div class="viewer-bar">
+          <button class="viewer-back" id="viewerBack" hidden>← Back to <span></span></button>
+          <button class="viewer-close" id="viewerClose" aria-label="Close">✕</button>
+        </div>
+        <div class="viewer-body" id="viewerBody"></div>
+      </div>
+    </div>
   </main>
 
   <script src="js/ingest.js"></script>

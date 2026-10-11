@@ -1,5 +1,7 @@
 # Screen Map
 
+### 👉 [**Open Screen Map**](https://yiftachneeman89.github.io/screen-map/) 👈
+
 See an Android app as a flow chart. Pick an Android Studio project folder and every screen (activity, fragment, dialog) becomes a box, with a labelled arrow for each way one screen opens another.
 
 - **Flow**: a top-to-bottom chart starting from the screen the app opens on. Each arrow is labelled with the buttons that make that jump; "Next / Back" pairs share one two-way arrow, and dashed arrows happen on their own (for example "already signed in → Home"). Screens linked by a shared bottom bar sit together in a frame, with their arrows hidden unless you switch them on. Drag the background to pan, scroll to zoom, drag a box to move it, hover a box to light up its arrows.

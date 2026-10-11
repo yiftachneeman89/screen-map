@@ -65,6 +65,18 @@ function saveSummary(name, model) {
       layouts: Object.keys(app?.res?.files?.layout || {}).length,
       unreachable: list.filter((s) => !s.launcher && !s.dialogOf && !s.host && !model.edges.some((e) => e.to === s.id && e.from !== s.id)).map(friendlyName),
       start: start ? friendlyName(start) : null, at: Date.now(),
+      // a small version of the flow chart for the Review Deck card
+      graph: (() => {
+        const ids = list.map((s) => s.id);
+        const pairs = new Map();
+        for (const e of model.edges) {
+          const a = ids.indexOf(e.from), b = ids.indexOf(e.to);
+          if (a < 0 || b < 0 || a === b) continue;
+          const k = `${a}>${b}`;
+          pairs.set(k, [a, b, (pairs.get(k)?.[2] ?? true) && !!e.auto]);
+        }
+        return { nodes: list.map((s) => ({ n: friendlyName(s), k: s.dialogOf ? "dialog" : s.kind, s: !!s.launcher })), edges: [...pairs.values()] };
+      })(),
     }));
   } catch {}
 }

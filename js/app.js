@@ -61,6 +61,9 @@ function saveSummary(name, model) {
       dialogs: list.filter((s) => s.kind === "dialog" || s.dialogOf).length,
       links: new Set(model.edges.map((e) => `${e.from}>${e.to}`)).size,
       buttons: list.reduce((n, s) => n + s.handlers.length, 0),
+      autoLinks: new Set(model.edges.filter((e) => e.auto).map((e) => `${e.from}>${e.to}`)).size,
+      layouts: Object.keys(app?.res?.files?.layout || {}).length,
+      unreachable: list.filter((s) => !s.launcher && !s.dialogOf && !s.host && !model.edges.some((e) => e.to === s.id && e.from !== s.id)).map(friendlyName),
       start: start ? friendlyName(start) : null, at: Date.now(),
     }));
   } catch {}

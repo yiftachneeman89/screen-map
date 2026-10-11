@@ -38,7 +38,7 @@ class FlowChart {
     this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.svg.classList.add("edges");
     const marker = (id, color) => `<marker id="${id}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${color}"/></marker>`;
-    this.svg.innerHTML = `<defs>${marker("arr", "#8a88a3")}${marker("arrhl", "#a9a4ff")}</defs>`;
+    this.svg.innerHTML = `<defs>${marker("arr", "#8a8a83")}${marker("arrhl", "#c8231b")}</defs>`;
     this.labels = h("div", "edge-labels");
     this.world.append(this.frames, this.svg);
     this.findGroups();

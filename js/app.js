@@ -31,6 +31,7 @@ async function load(items) {
     if (!Object.keys(model.screens).length) throw new Error("Couldn't find any activities or fragments in this project.");
     const renderer = new Renderer(res, model);
     app = { name: raw.name, res, model, renderer };
+    saveSummary(raw.name, model);
     $("projectName").textContent = raw.name;
     $("tabs").hidden = false;
     $("topActions").hidden = false;
@@ -47,6 +48,22 @@ async function load(items) {
     $("loadError").textContent = err.message || String(err);
     $("loadError").hidden = false;
   }
+}
+
+// what Review Deck shows on the Screen Map card
+function saveSummary(name, model) {
+  try {
+    const list = Object.values(model.screens);
+    const count = (k) => list.filter((s) => s.kind === k && !s.dialogOf).length;
+    const start = list.find((s) => s.launcher);
+    localStorage.setItem("sm.summary", JSON.stringify({
+      project: name, screens: list.length, activities: count("activity"), fragments: count("fragment"),
+      dialogs: list.filter((s) => s.kind === "dialog" || s.dialogOf).length,
+      links: new Set(model.edges.map((e) => `${e.from}>${e.to}`)).size,
+      buttons: list.reduce((n, s) => n + s.handlers.length, 0),
+      start: start ? friendlyName(start) : null, at: Date.now(),
+    }));
+  } catch {}
 }
 
 function showFlow() {

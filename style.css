@@ -359,3 +359,7 @@ details.code pre { margin: 8px 0 0; background: var(--code-bg); border: 1px soli
 .uml-btn:disabled { opacity: .7; cursor: progress; }
 .uml-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 900px) { .uml-bar { bottom: 64px; } }
+
+/* link back to Review Deck (shown when you came from there) */
+.deck-back { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 11px; margin-right: 4px; border-radius: 999px; border: 1px solid #cfccc2; background: #fff; color: #141414; font: 600 12.5px Inter, system-ui, sans-serif; text-decoration: none; white-space: nowrap; }
+.deck-back:hover { border-color: #141414; }

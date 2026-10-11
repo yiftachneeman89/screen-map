@@ -10,10 +10,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202610112220">
+  <link rel="stylesheet" href="style.css?v=202610112238">
 </head>
 <body>
   <header class="topbar">
+    <a class="deck-back" id="deckBack" href="/review-deck/" title="Back to Review Deck" hidden>&larr; Review Deck</a>
+    <script>try { if (sessionStorage.getItem("rd.from") || matchMedia("(display-mode: standalone)").matches) document.getElementById("deckBack").hidden = false; } catch (e) {}</script>
     <div class="brand">
       <img src="icons/logo.svg" alt="" class="brand-logo">
       <div>
@@ -103,13 +105,13 @@
     </div>
   </main>
 
-  <script src="js/ingest.js?v=202610112220"></script>
-  <script src="js/resources.js?v=202610112220"></script>
-  <script src="js/analyze.js?v=202610112220"></script>
-  <script src="js/render.js?v=202610112220"></script>
-  <script src="js/layout.js?v=202610112220"></script>
-  <script src="js/graph.js?v=202610112220"></script>
-  <script src="js/uml.js?v=202610112220"></script>
-  <script src="js/app.js?v=202610112220"></script>
+  <script src="js/ingest.js?v=202610112238"></script>
+  <script src="js/resources.js?v=202610112238"></script>
+  <script src="js/analyze.js?v=202610112238"></script>
+  <script src="js/render.js?v=202610112238"></script>
+  <script src="js/layout.js?v=202610112238"></script>
+  <script src="js/graph.js?v=202610112238"></script>
+  <script src="js/uml.js?v=202610112238"></script>
+  <script src="js/app.js?v=202610112238"></script>
 </body>
 </html>

@@ -34,6 +34,7 @@ async function load(items) {
     $("projectName").textContent = raw.name;
     $("tabs").hidden = false;
     $("topActions").hidden = false;
+    $("umlBtn").hidden = false;
     document.title = `${raw.name} · Screen Map`;
     $("loadingText").textContent = "Drawing screens…";
     // text is measured for ConstraintLayout/RelativeLayout, so the fonts must be there first
@@ -76,97 +77,254 @@ function setTab(view) {
 
 // ---------------------------------------------------------------- describing what a button does
 
-const NAV_VERB = { activity: "Opens", fragment: "Shows", dialog: "Opens the pop-up" };
+const NAV_VERB = { activity: "Opens", fragment: "Switches to", dialog: "Opens the pop-up" };
 
 function screenName(id) {
   const s = app.model.screens[id];
   return s ? friendlyName(s) : id;
 }
 
+// a screen name you can click to open that screen
+function screenLink(id) {
+  return app.model.screens[id] ? `<a class="go" data-go="${esc(id)}">${esc(screenName(id))}</a>` : `<b>${esc(id)}</b>`;
+}
+
+function dialogScreen(layout) {
+  return Object.keys(app.model.screens).find((k) => app.model.screens[k].layout === layout && app.model.screens[k].dialogOf);
+}
+
+// one effect -> HTML phrase, e.g. "opens <a>Home</a>"
 function phrase(e) {
   const s = app.model.screens[e.to];
   switch (e.type) {
-    case "nav": return `${NAV_VERB[s?.kind] || "Opens"} ${screenName(e.to)}`;
-    case "back": return { finish: "closes this screen", finishAffinity: "closes the app's screens", onBackPressed: "goes back", popBackStack: "goes back", navigateUp: "goes back", dismiss: "closes the pop-up", dismissAllowingStateLoss: "closes the pop-up" }[e.how] || "goes back";
-    case "toast": return e.text ? `shows the message “${e.text}”` : e.error ? "shows the error message" : "shows a message";
-    case "alert": return e.title ? `shows a pop-up “${e.title}”` : "shows a pop-up";
+    case "nav": return `${NAV_VERB[s?.kind] || "Opens"} ${screenLink(e.to)}`;
+    case "back": return { finish: "closes this screen", finishAffinity: "closes all of the app's screens", onBackPressed: "goes back to the previous screen", popBackStack: "goes back to the previous screen", navigateUp: "goes back to the previous screen", dismiss: "closes the pop-up", dismissAllowingStateLoss: "closes the pop-up" }[e.how] || "goes back";
+    case "toast": return e.text ? `shows the message <q>${esc(e.text)}</q>` : e.error ? "shows the error it got" : "shows a short message";
+    case "alert": return e.title ? `shows a pop-up titled <q>${esc(e.title)}</q>` : "shows a pop-up";
     case "dialog": {
-      const d = Object.values(app.model.screens).find((x) => x.layout === e.layout && x.dialogOf);
-      return `opens the “${d ? friendlyName(d) : e.layout}” pop-up`;
+      const d = dialogScreen(e.layout);
+      return d ? `opens the ${screenLink(d)} pop-up` : `opens the <q>${esc(e.layout)}</q> pop-up`;
     }
     case "api":
-    case "visibility": return e.text;
-    case "call": return `runs ${e.name}`;
+    case "visibility": return esc(e.text);
+    case "call": return `runs <code>${esc(e.name)}</code>`;
     default: return "";
   }
 }
 
-// ["if a", "if b", "if it fails"] -> "if a and b, if it fails"
+// ---- conditions: code -> plain English ("email.isEmpty() || password.isEmpty()" -> "email or password is empty")
+
+function words(name) {
+  return name.replace(/^m(?=[A-Z])/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase().trim();
+}
+
+// a code value -> a noun ("binding.emailEt.getText().toString()" -> "email"); null if it's too complex
+function noun(x) {
+  x = x.trim();
+  if (/^("[^"]*"|'[^']*'|-?\d[\d.]*[fFlL]?)$/.test(x)) return x.startsWith("'") ? `"${x.slice(1, -1)}"` : x;
+  let m = x.match(/^R\.id\.(\w+)$/);
+  if (m) return `“${idLabel(m[1])}”`;
+  x = x.replace(/^this\./, "").replace(/(\.(getText|toString|trim|getValue|text|value)(\(\))?)+$/, "");
+  x = x.replace(/\.get([A-Z]\w*)\(\)$/, ".$1").replace(/^get([A-Z]\w*)\(\)$/, "$1");
+  m = x.match(/^(.+)\.(length|size)(\(\))?$/);
+  if (m) { const n = noun(m[1]); return n && `the ${m[2] === "size" ? "number of" : "length of"} ${n}`; }
+  if (!/^[\w.]+$/.test(x)) return null;
+  const last = x.split(".").pop().replace(/(Et|Edit|EditText|Tv|Txt|Input|Field)$/, "");
+  return /^[A-Z_]+$/.test(last) ? last.toLowerCase().replace(/_/g, " ") : words(last);
+}
+
+// split "a && (b || c)" at top-level operators
+function splitTop(expr, op) {
+  const parts = [];
+  let depth = 0, last = 0, q = null;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (q) { if (ch === "\\") i++; else if (ch === q) q = null; continue; }
+    if (ch === '"' || ch === "'") q = ch;
+    else if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (!depth && expr.startsWith(op, i)) { parts.push(expr.slice(last, i)); last = i + op.length; i += op.length - 1; }
+  }
+  parts.push(expr.slice(last));
+  return parts.map((p) => p.trim());
+}
+
+function unwrap(x) {
+  x = x.trim();
+  while (x.startsWith("(") && matchClose(x, 0) === x.length - 1) x = x.slice(1, -1).trim();
+  return x;
+}
+
+// expression -> English, `neg` = say the opposite. null when it can't be put into words.
+function plainExpr(expr, neg = false) {
+  expr = unwrap(expr);
+  let m = expr.match(/^not \((.*)\)$/) || expr.match(/^not (.*)$/);
+  if (m) return plainExpr(m[1], !neg);
+  for (const [op, word, opp] of [["||", "or", "and"], ["&&", "and", "or"]]) {
+    let parts = splitTop(expr, op);
+    if (parts.length < 2) continue;
+    // "x != null && x.equals(..)" - the null check is just a safety net
+    if (op === "&&") parts = parts.filter((p) => !(/^([\w.]+)\s*!=\s*null$/.test(p) && parts.some((o) => o !== p && o.startsWith(p.match(/^([\w.]+)/)[1] + "."))));
+    const said = parts.map((p) => plainExpr(p, neg));
+    if (said.some((x) => x == null)) return null;
+    if (said.length === 1) return said[0];
+    // "email is empty or password is empty" -> "email or password is empty"
+    const tail = said.map((s) => s.match(/^(\S+) (is .*)$/));
+    if (tail.every((t) => t && t[2] === tail[0][2])) return `${tail.map((t) => t[1]).join(` ${neg ? opp : word} `)} ${tail[0][2]}`;
+    return said.join(` ${neg ? opp : word} `);
+  }
+  if (/^!/.test(expr)) return plainExpr(expr.slice(1), !neg);
+  return plainAtom(expr, neg);
+}
+
+const CMP = { "==": ["is", "is not"], "!=": ["is not", "is"], ">": ["is more than", "is at most"], "<": ["is less than", "is at least"], ">=": ["is at least", "is less than"], "<=": ["is at most", "is more than"] };
+
+function idLabel(id) {
+  const info = app.model.idInfo[id];
+  return (info && (info.text || info.desc)) || humanizeId(id);
+}
+
+function plainAtom(a, neg) {
+  let m;
+  // radioGroup.getCheckedRadioButtonId() == R.id.yes  ->  “Yes” is picked
+  if ((m = a.match(/getCheckedRadioButtonId\(\)\s*(==|!=)\s*R\.id\.(\w+)$/))) return `“${idLabel(m[2])}” ${(m[1] === "==") !== neg ? "is picked" : "isn't picked"}`;
+  if ((m = a.match(/^(?:binding\.)?(\w+)\.(isChecked|isSelected)(\(\))?$/))) {
+    const id = Object.keys(app.model.idInfo).find((k) => norm(k) === norm(m[1]) || norm(k) === norm(snakeCase(m[1])));
+    const n = id ? `“${idLabel(id)}”` : noun(m[1]);
+    return `${n} ${neg ? "isn't ticked" : "is ticked"}`;
+  }
+  if ((m = a.match(/(?:^|\.)(?:getCurrentUser\(\)|currentUser)\s*(==|!=)\s*null$/))) return (m[1] === "!=") !== neg ? "someone is already signed in" : "nobody is signed in";
+  if (/^savedInstanceState\s*==\s*null$/.test(a)) return neg ? "the screen is being restored" : "the screen is opening for the first time";
+  if (/^savedInstanceState\s*!=\s*null$/.test(a)) return plainAtom("savedInstanceState == null", !neg);
+  if ((m = a.match(/^(.+?)\s*(==|!=|>=|<=|>|<)\s*(.+)$/))) {
+    const [, l, op, r] = m;
+    const left = noun(l);
+    if (!left) return null;
+    if (r === "null" && (op === "==" || op === "!=")) return (op === "==") !== neg ? `${left} is missing` : `${left} is set`;
+    if (/^(true|false)$/.test(r) && (op === "==" || op === "!=")) return plainAtom(l, (r === "false") !== (op === "!=") !== neg);
+    const right = noun(r);
+    return right && `${left} ${CMP[op][neg ? 1 : 0]} ${right}`;
+  }
+  if ((m = a.match(/^([\w.]+)\.(isSuccessful|isComplete)(\(\))?$/))) return neg ? "it failed" : "it worked";
+  if ((m = a.match(/^(?:TextUtils\.)?isEmpty\((.+)\)$/))) a = `${m[1]}.isEmpty()`;
+  if ((m = a.match(/^(.+)\.(isEmpty|isBlank|isNullOrEmpty|isNullOrBlank|isNotEmpty|isNotBlank)(\(\))?$/))) {
+    const n = noun(m[1]);
+    const empty = /Not/.test(m[2]) ? neg : !neg;
+    return n && `${n} ${empty ? "is empty" : "is not empty"}`;
+  }
+  if ((m = a.match(/^(.+)\.(equals|equalsIgnoreCase|contains|startsWith|endsWith)\((.+)\)$/))) {
+    const l = noun(m[1]), r = noun(m[3]);
+    const verb = { equals: ["is", "is not"], equalsIgnoreCase: ["is", "is not"], contains: ["contains", "doesn't contain"], startsWith: ["starts with", "doesn't start with"], endsWith: ["ends with", "doesn't end with"] }[m[2]];
+    return l && r && `${l} ${verb[neg ? 1 : 0]} ${r}`;
+  }
+  // isBeginner(), user.isPremium, hasLessons()
+  if ((m = a.match(/^(?:([\w.]+)\.)?(is|has|can|should)([A-Z]\w*)(\(\))?$/))) {
+    const subj = m[1] ? noun(m[1]) + " " : "";
+    const what = words(m[3]);
+    const verb = { is: ["is", "is not"], has: ["has", "doesn't have"], can: ["can", "can't"], should: ["should", "shouldn't"] }[m[2]];
+    if (!subj) return m[2] === "is" ? `${neg ? "not " : ""}${what}` : `${neg ? "it " + verb[1] : "it " + verb[0]} ${what}`;
+    return `${subj}${verb[neg ? 1 : 0]} ${what}`;
+  }
+  // allFieldsFilled(x) -> "all fields filled"
+  if ((m = a.match(/^(?:[\w.]+\.)?(\w+)\(.*\)$/))) return `${neg ? "not " : ""}${words(m[1])}`;
+  if (/^[\w.]+$/.test(a)) return `${neg ? "not " : ""}${noun(a)}`;
+  return null;
+}
+
+// one condition label as HTML: "if email is empty", or the code itself when it can't be said in words
+function condHtml(c) {
+  if (!/^if /.test(c) || /^if it('s| )/.test(c)) return esc(c);
+  const said = plainExpr(c.slice(3));
+  return said ? `if ${esc(said)}` : `if <code>${esc(c.slice(3))}</code>`;
+}
+
+// ["if a", "if b"] -> "if a and b" (plain text, for tooltips)
 function condText(cond) {
-  const list = (cond || []).filter((c, i, a) => a.indexOf(c) === i);
+  const list = (cond || []).filter((c, i, a) => a.indexOf(c) === i).map((c) => condHtml(c).replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
   return list.map((c, i) => (i && /^if /.test(c) && /^if /.test(list[i - 1]) ? c.slice(3) : c)).join(" and ");
 }
 
-function lowerFirst(s) { return s ? s[0].toLowerCase() + s.slice(1) : s; }
 function upperFirst(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+
+function lowerFirst(s) { return s && s[0] !== "<" ? s[0].toLowerCase() + s.slice(1) : s; }
 
 function joinPhrases(list) {
   const parts = [...new Set(list.map(lowerFirst))];
   if (parts.length <= 1) return parts[0] || "";
-  return parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+  return parts.slice(0, -1).join(", ") + ", then " + parts[parts.length - 1];
 }
 
-// effects -> ["If X: opens A and closes this screen.", "Otherwise: shows the message “…”."]
-function describeLines(effects) {
-  const meaningful = effects.filter((e) => e.type !== "call");
-  const calls = effects.filter((e) => e.type === "call" && !meaningful.some((m) => m.via && e.name.startsWith(m.via + "(")));
-  if (!meaningful.length) {
-    return [calls.length ? `Runs ${calls.map((c) => c.name).join(", ")}.` : "Doesn't change screens - it may only update this one."];
-  }
-  const groups = new Map();
-  for (const e of meaningful) {
-    const key = condText(e.cond);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(phrase(e));
-  }
-  const out = [];
-  for (const [cond, list] of groups) {
-    const body = joinPhrases(list);
-    out.push(cond ? `${upperFirst(cond)}: ${body}.` : upperFirst(body) + ".");
-  }
-  if (calls.length) out.push(`Also runs ${calls.map((c) => c.name).join(", ")}.`);
-  return out;
-}
-
-function describe(effects) { return describeLines(effects).join(" "); }
-
-// one sentence as a paragraph, several as a list
-function describeEl(effects) {
-  const lines = describeLines(effects);
-  const el = h(lines.length > 1 ? "ul" : "p", "b-desc");
-  if (lines.length > 1) for (const t of lines) { const li = h("li"); li.textContent = t; el.append(li); }
-  else el.textContent = lines[0];
-  return el;
-}
-
-// the screens a button leads to, as buttons that open them
-function effectChips(effects) {
-  const wrap = h("div", "h-effects");
-  const seen = new Set();
+// effects -> a tree of steps: [{ html }, { cond, steps: [...] }] in the order the code runs
+function stepTree(effects) {
+  const root = { steps: [] };
   for (const e of effects) {
-    let id = null;
-    if (e.type === "nav" && app.model.screens[e.to]) id = e.to;
-    if (e.type === "dialog") id = Object.keys(app.model.screens).find((k) => app.model.screens[k].layout === e.layout && app.model.screens[k].dialogOf);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const chip = h("button", "fx-nav");
-    chip.innerHTML = `<span>Go to</span> ${esc(screenName(id))} →`;
-    chip.onclick = () => { openScreen(id, null, true); app.chart?.focusNode(id); };
-    if (e.cond && e.cond.length) chip.title = upperFirst(condText(e.cond));
-    wrap.append(chip);
+    let node = root;
+    for (const c of [...new Set(e.cond || [])]) {
+      let child = node.steps[node.steps.length - 1];
+      if (!child || child.cond !== c) {
+        child = { cond: c, steps: [] };
+        node.steps.push(child);
+      }
+      node = child;
+    }
+    const last = node.steps[node.steps.length - 1];
+    if (last && last.html != null) last.html.push(phrase(e));
+    else node.steps.push({ html: [phrase(e)] });
   }
-  return wrap.children.length ? wrap : null;
+  return root.steps;
 }
+
+// "if x" right after "if not x" (or the other way round) reads better as "Otherwise"
+function isOpposite(a, b) {
+  if (!/^if /.test(a) || !/^if /.test(b)) return false;
+  return negate(a.slice(3)) === b.slice(3) || negate(b.slice(3)) === a.slice(3);
+}
+
+function stepsEl(steps) {
+  const ul = h("ul", "steps");
+  steps.forEach((st, i) => {
+    const li = h("li");
+    if (st.html) {
+      const text = upperFirst(joinPhrases(st.html));
+      li.innerHTML = /[.!?](<\/q>)?$/.test(text) ? text : text + ".";
+    } else {
+      const prev = steps[i - 1];
+      const label = prev && prev.cond && isOpposite(prev.cond, st.cond) ? "Otherwise" : upperFirst(condHtml(st.cond));
+      li.className = "step-if";
+      li.innerHTML = `<span class="cond">${label}:</span>`;
+      if (/<code>/.test(label)) li.querySelector(".cond").title = "Screen Map couldn't put this condition into words, so it shows the code";
+      li.append(stepsEl(st.steps));
+    }
+    ul.append(li);
+  });
+  return ul;
+}
+
+// a button's effects as readable steps
+function describeEl(effects, event) {
+  const meaningful = effects.filter((e) => e.type !== "call");
+  // calls already explained by what they do, or that are just the condition being checked, aren't worth repeating
+  const condCode = effects.flatMap((e) => e.cond || []).join(" ");
+  const calls = effects.filter((e) => e.type === "call" && !meaningful.some((m) => m.via && e.name.startsWith(m.via + "(")) && !condCode.includes(e.name.split("(")[0] + "("));
+  const wrap = h("div", "b-desc");
+  if (!meaningful.length) {
+    const p = h("p");
+    const what = event === "toggle" ? "Turns this option on or off." : event === "type" ? "Reacts as you type." : "Only changes things on this screen.";
+    p.innerHTML = `${what} <span class="muted">No screen change, message or saving found${calls.length ? "" : " in the code"}.</span>`;
+    wrap.append(p);
+  } else {
+    wrap.append(stepsEl(stepTree(meaningful)));
+  }
+  if (calls.length) {
+    const p = h("p", "b-calls");
+    p.innerHTML = `Also runs ${calls.map((c) => `<code>${esc(c.name)}</code>`).join(" ")}`;
+    wrap.append(p);
+  }
+  return wrap;
+}
+
+// plain-text version (used by the dev harness)
+function describe(effects) { return describeEl(effects).textContent.replace(/\s+/g, " ").trim(); }
 
 function codeBlock(item) {
   if (!item.code) return null;
@@ -251,12 +409,12 @@ function openScreen(id, vid, fromLink) {
     links.append(row);
   };
   linkRow("Comes from", incoming, s.launcher ? "Nothing - the app opens here" : "Nothing in the code opens this screen");
-  linkRow("Goes to", outgoing, "No other screens");
+  linkRow("Leads to", outgoing, "No other screens");
   right.append(links);
 
-  // every button and what it does
+  // every button and what it does, numbered to match badges on the phone
   const sec = h("section", "v-section");
-  sec.innerHTML = `<h3>What each button does</h3>`;
+  sec.innerHTML = `<h3>Buttons</h3>`;
   const cards = new Map();
   const byId = new Map();
   for (const hd of s.handlers) {
@@ -264,19 +422,20 @@ function openScreen(id, vid, fromLink) {
     if (!byId.has(key)) byId.set(key, []);
     byId.get(key).push(hd);
   }
+  const onPhone = new Set([...phone.querySelectorAll("[data-vid]")].filter((v) => !v.closest("[data-copy]")).map((v) => v.dataset.vid));
+  let num = 0;
+  const numbers = new Map();
   for (const list of byId.values()) {
     const first = list[0];
     const card = h("div", "b-card");
     const top = h("div", "b-top");
+    const n = first.id && onPhone.has(first.id) ? ++num : null;
+    if (n) numbers.set(first.id, n);
     const events = [...new Set(list.map((x) => x.event))].filter((ev) => ev && !/^(click|tap)$/i.test(ev));
-    top.innerHTML = `<span class="b-name"></span>${events.length ? `<span class="b-event">${esc(events.join(", "))}</span>` : ""}`;
+    top.innerHTML = `${n ? `<span class="b-num">${n}</span>` : `<span class="b-num off" title="Not drawn on this screen">·</span>`}<span class="b-name"></span>${events.length ? `<span class="b-event">${esc(events.join(", "))}</span>` : ""}`;
     top.querySelector(".b-name").textContent = first.label;
     card.append(top);
-    for (const hd of list) {
-      card.append(describeEl(hd.effects));
-      const chips = effectChips(hd.effects);
-      if (chips) card.append(chips);
-    }
+    for (const hd of list) card.append(describeEl(hd.effects, hd.event));
     for (const hd of list) { const code = codeBlock(hd); if (code) card.append(code); }
     if (first.id) {
       card.onmouseenter = () => markView(phone, first.id, true);
@@ -296,6 +455,7 @@ function openScreen(id, vid, fromLink) {
       v.onclick = (ev) => { ev.stopPropagation(); selectCard(cards, phone, v.dataset.vid); };
     }
   }
+  placeBadges(shot, phone, numbers, cards);
 
   // things that happen without a tap
   if (s.auto.length) {
@@ -303,11 +463,9 @@ function openScreen(id, vid, fromLink) {
     sec3.innerHTML = `<h3>Happens on its own</h3>`;
     for (const a of s.auto) {
       const card = h("div", "b-card auto");
-      card.innerHTML = `<div class="b-top"><span class="b-name auto"></span></div>`;
+      card.innerHTML = `<div class="b-top"><span class="b-num auto">⚡</span><span class="b-name"></span></div>`;
       card.querySelector(".b-name").textContent = a.trigger;
       card.append(describeEl(a.effects));
-      const chips = effectChips(a.effects);
-      if (chips) card.append(chips);
       const code = codeBlock(a);
       if (code) card.append(code);
       sec3.append(card);
@@ -336,6 +494,41 @@ function openScreen(id, vid, fromLink) {
   if (vid && cards.has(vid)) setTimeout(() => selectCard(cards, phone, vid), 30);
 }
 
+// small numbered circles on the phone, matching the numbers in the button list.
+// They follow their buttons as images load and the layout settles.
+function placeBadges(shot, phone, numbers, cards) {
+  const badges = [];
+  for (const [vid, n] of numbers) {
+    const v = [...phone.querySelectorAll(`[data-vid="${CSS.escape(vid)}"]`)].find((x) => !x.closest("[data-copy]"));
+    if (!v) continue;
+    const b = h("button", "p-badge");
+    b.textContent = n;
+    b.dataset.vid = vid;
+    b.title = "See what this button does";
+    b.onclick = (ev) => { ev.stopPropagation(); selectCard(cards, phone, vid); };
+    shot.append(b);
+    badges.push([b, v]);
+  }
+  const place = () => {
+    const base = shot.getBoundingClientRect();
+    const k = shot.offsetWidth / (base.width || 1);  // undo the pop-up's opening zoom animation
+    for (const [b, v] of badges) {
+      const r = v.getBoundingClientRect();
+      b.hidden = !r.width || !r.height;
+      b.style.left = Math.max(2, Math.min(shot.offsetWidth - 22, (r.left - base.left) * k - 8)) + "px";
+      b.style.top = Math.max(2, Math.min(shot.offsetHeight - 22, (r.top - base.top) * k - 8)) + "px";
+    }
+  };
+  place();
+  phone.addEventListener("load", place, true);
+  const ro = new ResizeObserver(place);
+  ro.observe(phone);
+  for (const el of phone.querySelectorAll("img, [data-vid]")) ro.observe(el);
+  document.fonts.ready.then(place);
+  $("viewerCard").addEventListener("animationend", place, { once: true });
+  setTimeout(place, 400);
+}
+
 function markView(phone, vid, on) {
   for (const v of phone.querySelectorAll(`[data-vid="${CSS.escape(vid)}"]`)) if (!v.closest("[data-copy]")) v.classList.toggle("active", on);
 }
@@ -343,6 +536,7 @@ function markView(phone, vid, on) {
 function selectCard(cards, phone, vid) {
   for (const c of cards.values()) c.classList.remove("active");
   phone.querySelectorAll(".wired.active").forEach((v) => v.classList.remove("active"));
+  for (const b of document.querySelectorAll(".p-badge")) b.classList.toggle("active", b.dataset.vid === vid);
   const card = cards.get(vid);
   if (!card) return;
   card.classList.add("active");
@@ -434,6 +628,7 @@ $("openOther").onclick = () => {
   app = null;
   $("tabs").hidden = true;
   $("topActions").hidden = true;
+  $("umlBtn").hidden = true;
   closeViewer();
   $("projectName").textContent = "Your Android app as a flow chart";
   document.title = "Screen Map";
@@ -441,6 +636,13 @@ $("openOther").onclick = () => {
 };
 for (const b of document.querySelectorAll(".tab-btn")) b.onclick = () => (b.dataset.view === "flow" ? showFlow() : showGallery());
 $("viewerClose").onclick = closeViewer;
+$("umlBtn").onclick = downloadUml;
+$("viewerBody").addEventListener("click", (e) => {
+  const go = e.target.closest("[data-go]");
+  if (!go) return;
+  openScreen(go.dataset.go, null, true);
+  app.chart?.focusNode(go.dataset.go);
+});
 $("viewer").onclick = (e) => { if (e.target === $("viewer")) closeViewer(); };
 $("viewerBack").onclick = () => { viewHistory.pop(); const id = viewHistory.pop(); if (id) { openScreen(id, null, true); app.chart?.focusNode(id); } };
 $("zoomIn").onclick = () => app.chart.zoomBy(1.25);

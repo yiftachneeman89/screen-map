@@ -1035,7 +1035,7 @@ class Analyzer {
     return {
       screens, edges: finalEdges, launchers: this.launchers.filter((n) => screens[n]),
       appTheme: this.appTheme, appLabel: this.appLabel, activities: this.manifestActivities,
-      classes: this.classes, hostOf: this.hostOf, idInfo: this.idInfo,
+      classes: this.classes, hostOf: this.hostOf, idInfo: this.idInfo, files: this.files,
     };
   }
 }

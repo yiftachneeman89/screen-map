@@ -631,26 +631,6 @@ function openLayout(name, usage) {
 
 // ---------------------------------------------------------------- events
 
-$("folderInput").addEventListener("change", (e) => { if (e.target.files.length) load(filesFromInput(e.target.files)); e.target.value = ""; });
-const drop = $("drop");
-drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
-drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-drop.addEventListener("drop", async (e) => {
-  e.preventDefault();
-  drop.classList.remove("over");
-  load(await filesFromDrop(e.dataTransfer));
-});
-$("openOther").onclick = () => {
-  if (app?.chart) app.chart.host.innerHTML = "";
-  app = null;
-  $("tabs").hidden = true;
-  $("topActions").hidden = true;
-  $("umlBar").hidden = true;
-  closeViewer();
-  $("projectName").textContent = "Your Android app as a flow chart";
-  document.title = "Screen Map";
-  show("landing");
-};
 for (const b of document.querySelectorAll(".tab-btn")) b.onclick = () => (b.dataset.view === "flow" ? showFlow() : showGallery());
 $("viewerClose").onclick = closeViewer;
 $("umlBtn").onclick = () => downloadUmlPdf($("umlBtn"));
@@ -680,3 +660,6 @@ $("search").addEventListener("keydown", (e) => {
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && app) closeViewer(); });
 window.addEventListener("resize", () => { if (app?.chart && !$("flowView").hidden) app.chart.apply(); });
+
+// the project comes from Review Deck's sign-in, shared by all three tools
+if (!document.querySelector('script[src$="dev.js"]')) DeckStore.require().then((saved) => load(saved.items));

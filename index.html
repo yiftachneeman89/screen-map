@@ -10,12 +10,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202610112238">
+  <link rel="stylesheet" href="style.css?v=202610112303">
 </head>
 <body>
   <header class="topbar">
-    <a class="deck-back" id="deckBack" href="/review-deck/" title="Back to Review Deck" hidden>&larr; Review Deck</a>
-    <script>try { if (sessionStorage.getItem("rd.from") || matchMedia("(display-mode: standalone)").matches) document.getElementById("deckBack").hidden = false; } catch (e) {}</script>
+    <a class="deck-back" href="/review-deck/" title="Back to Review Deck">&larr; Review Deck</a>
     <div class="brand">
       <img src="icons/logo.svg" alt="" class="brand-logo">
       <div>
@@ -32,37 +31,21 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 4.4 12.4l4.3 4.3 1.4-1.4-4.3-4.3A7 7 0 0 0 11 4Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"/></svg>
         <input id="search" type="search" placeholder="Find a screen" autocomplete="off">
       </label>
-      <button class="pill-btn" id="openOther" title="Load a different project">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-        <span>Open project</span>
-      </button>
     </div>
   </header>
 
   <main id="main">
-    <section class="landing" id="landing">
+    <section class="landing" id="landing" hidden>
       <div class="landing-copy">
-        <h2>See how your app fits together</h2>
-        <p>Drop in an Android Studio project. Every screen is drawn from its XML layout, and arrows run from each button to the screen it opens.</p>
-        <ul class="points">
-          <li><b>Screens</b> Activities, fragments and dialogs, drawn like the phone shows them</li>
-          <li><b>Buttons</b> What each one does, in plain words, with the code behind it</li>
-          <li><b>Flow</b> Who opens whom, including automatic jumps like "already signed in"</li>
-        </ul>
+        <h2>Couldn't open your project</h2>
+        <p class="error" id="loadError"></p>
+        <p><a href="/review-deck/">Back to Review Deck</a> to choose your code again.</p>
       </div>
-      <label class="drop" id="drop">
-        <input type="file" id="folderInput" webkitdirectory multiple hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
-        <strong>Choose your project folder</strong>
-        <span>or drag it here · the folder with <code>app/</code> in it</span>
-        <small>Runs entirely in your browser. Nothing is uploaded.</small>
-      </label>
-      <p class="error" id="loadError" hidden></p>
     </section>
 
-    <section class="loading" id="loading" hidden>
+    <section class="loading" id="loading">
       <div class="spinner"></div>
-      <p id="loadingText">Reading files…</p>
+      <p id="loadingText">Loading your project…</p>
     </section>
 
     <section class="flow-view" id="flowView" hidden>
@@ -105,13 +88,14 @@
     </div>
   </main>
 
-  <script src="js/ingest.js?v=202610112238"></script>
-  <script src="js/resources.js?v=202610112238"></script>
-  <script src="js/analyze.js?v=202610112238"></script>
-  <script src="js/render.js?v=202610112238"></script>
-  <script src="js/layout.js?v=202610112238"></script>
-  <script src="js/graph.js?v=202610112238"></script>
-  <script src="js/uml.js?v=202610112238"></script>
-  <script src="js/app.js?v=202610112238"></script>
+  <script src="js/ingest.js?v=202610112303"></script>
+  <script src="js/resources.js?v=202610112303"></script>
+  <script src="js/analyze.js?v=202610112303"></script>
+  <script src="js/render.js?v=202610112303"></script>
+  <script src="js/layout.js?v=202610112303"></script>
+  <script src="js/graph.js?v=202610112303"></script>
+  <script src="js/uml.js?v=202610112303"></script>
+  <script src="/review-deck/shared.js?v=4"></script>
+  <script src="js/app.js?v=202610112303"></script>
 </body>
 </html>

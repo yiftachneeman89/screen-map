@@ -161,13 +161,79 @@ function packageOf(file) {
   return m ? m[1] : "";
 }
 
-function memberLine(vis, text, isStatic, isAbstract) {
-  return `  ${UML_VIS[vis] || ""}${isStatic ? "{static} " : ""}${isAbstract ? "{abstract} " : ""}${text}`;
+function memberText(vis, text, isStatic, isAbstract) {
+  return { vis: UML_VIS[vis] || "", text, isStatic: !!isStatic, isAbstract: !!isAbstract };
 }
 
-function buildUml(model, projectName) {
+// the diagram as plain data, shared by the PlantUML and PDF outputs
+function umlModel(model) {
   const ifaces = findInterfaces(model.files || [...new Set(Object.values(model.classes).map((c) => c.file))]);
   const all = collectClasses(model, ifaces);
+  const classes = [], rels = [];
+  const external = new Set();
+  for (const c of all) {
+    const { fields, methods } = c.file.kotlin ? kotlinMembers(c) : javaMembers(c);
+    const before = c.file.masked.slice(Math.max(0, c.start - 40), c.start);
+    const isAbstract = !c.interface && /\babstract\s+$/.test(before);
+    const isObject = /^object\b/.test(c.file.masked.slice(c.start, c.start + 7));
+    const defaultVis = c.file.kotlin || c.interface ? "public" : "package";
+    classes.push({
+      uid: c.uid, label: c.label, pkg: packageOf(c.file),
+      kw: c.interface ? "interface" : isAbstract ? "abstract class" : "class",
+      stereo: UML_STEREO[c.kind] || (isObject ? "object" : c.interface ? "interface" : ""),
+      fields: fields.map((fl) => memberText(fl.vis || defaultVis, `${fl.name}${fl.type ? ": " + fl.type : ""}`, fl.isStatic)),
+      methods: methods.map((m) => memberText(m.vis || defaultVis, `${m.name}(${m.params.join(", ")})${m.ret && m.ret !== "Unit" && m.ret !== "void" ? ": " + m.ret : ""}`, m.isStatic, m.isAbstract)),
+    });
+
+    const parents = c.interface ? c.parents : [c.superName].filter(Boolean);
+    for (const p of parents) {
+      const hit = resolveType(p, c, all);
+      if (!hit) external.add(p);
+      rels.push({ type: "extends", from: c.uid, to: hit ? hit.uid : p });
+    }
+    if (!c.interface) for (const i of implementsOf(c, ifaces)) rels.push({ type: "implements", from: c.uid, to: ifaces[i].uid });
+    if (c.outerRef) rels.push({ type: "inner", from: c.outerRef.uid, to: c.uid });
+    const has = new Map();
+    for (const fl of fields) {
+      for (const [t, q] of typeNames(fl.type)) {
+        const hit = resolveType(t, c, all, q);
+        if (!hit || hit === c || hit === c.outerRef || hit.outerRef === c || (q && hit.name !== t)) continue;
+        if (!has.has(hit.uid)) has.set(hit.uid, new Set());
+        has.get(hit.uid).add(fl.name);
+      }
+    }
+    for (const [uid, names] of has) rels.push({ type: "has", from: c.uid, to: uid, label: [...names].join(", ") });
+  }
+
+  // which screen opens which (dialogs made from a layout aren't classes, so they're left out)
+  const uidOf = (name) => (all.find((x) => x.name === name && x.label === name) || {}).uid;
+  const opens = new Map();  // "a>b" -> opened by a tap at least once?
+  for (const e of model.edges) {
+    const a = uidOf(e.from), b = uidOf(e.to);
+    if (!a || !b || a === b) continue;
+    opens.set(`${a}>${b}`, opens.get(`${a}>${b}`) || !e.auto);
+  }
+  for (const [key, tapped] of opens) {
+    const [from, to] = key.split(">");
+    rels.push({ type: "opens", from, to, label: tapped ? "opens" : "opens on its own" });
+  }
+  classes.sort((a, b) => a.pkg.localeCompare(b.pkg) || a.label.localeCompare(b.label));
+  return { classes, rels, external: [...external].sort() };
+}
+
+function byPackage(classes) {
+  const map = new Map();
+  for (const c of classes) {
+    if (!map.has(c.pkg)) map.set(c.pkg, []);
+    map.get(c.pkg).push(c);
+  }
+  return map;
+}
+
+// ---------------------------------------------------------------- PlantUML (.puml)
+
+function buildUml(model, projectName) {
+  const d = umlModel(model);
   const lines = [
     "@startuml",
     `title ${projectName} - class diagram`,
@@ -178,87 +244,183 @@ function buildUml(model, projectName) {
     "hide empty members",
     "",
   ];
-  const rel = [];
-  const external = new Set();
-
-  const byPkg = new Map();
-  for (const c of all) {
-    const pkg = packageOf(c.file);
-    if (!byPkg.has(pkg)) byPkg.set(pkg, []);
-    byPkg.get(pkg).push(c);
-  }
-  for (const [pkg, list] of [...byPkg].sort((a, b) => a[0].localeCompare(b[0]))) {
+  const member = (m) => `  ${m.vis}${m.isStatic ? "{static} " : ""}${m.isAbstract ? "{abstract} " : ""}${m.text}`;
+  for (const [pkg, list] of byPackage(d.classes)) {
     if (pkg) lines.push(`package ${pkg} {`);
-    for (const c of list.sort((a, b) => a.label.localeCompare(b.label))) {
-      const { fields, methods } = c.file.kotlin ? kotlinMembers(c) : javaMembers(c);
-      const before = c.file.masked.slice(Math.max(0, c.start - 40), c.start);
-      const isAbstract = !c.interface && /\babstract\s+$/.test(before);
-      const isObject = /^object\b/.test(c.file.masked.slice(c.start, c.start + 7));
-      const stereo = UML_STEREO[c.kind] ? ` <<${UML_STEREO[c.kind]}>>` : isObject ? " <<object>>" : "";
-      const kw = c.interface ? "interface" : isAbstract ? "abstract class" : "class";
-      const defaultVis = c.file.kotlin || c.interface ? "public" : "package";
-      lines.push(`${kw} "${c.label}" as ${c.uid}${stereo} {`);
-      for (const fl of fields) lines.push(memberLine(fl.vis || defaultVis, `${fl.name}${fl.type ? ": " + fl.type : ""}`, fl.isStatic));
-      for (const m of methods) lines.push(memberLine(m.vis || defaultVis, `${m.name}(${m.params.join(", ")})${m.ret && m.ret !== "Unit" && m.ret !== "void" ? ": " + m.ret : ""}`, m.isStatic, m.isAbstract));
-      lines.push("}");
-
-      // relationships
-      const parents = c.interface ? c.parents : [c.superName].filter(Boolean);
-      for (const p of parents) {
-        const hit = resolveType(p, c, all);
-        if (!hit) external.add(p);
-        rel.push(`${hit ? hit.uid : p} <|-- ${c.uid}`);
-      }
-      if (!c.interface) for (const i of implementsOf(c, ifaces)) rel.push(`${ifaces[i].uid} <|.. ${c.uid}`);
-      if (c.outerRef) rel.push(`${c.outerRef.uid} +-- ${c.uid}`);
-      const has = new Map();
-      for (const fl of fields) {
-        for (const [t, q] of typeNames(fl.type)) {
-          const hit = resolveType(t, c, all, q);
-          if (!hit || hit === c || hit === c.outerRef || hit.outerRef === c || (q && hit.name !== t)) continue;
-          if (!has.has(hit.uid)) has.set(hit.uid, []);
-          has.get(hit.uid).push(fl.name);
-        }
-      }
-      for (const [uid, names] of has) rel.push(`${c.uid} --> ${uid} : ${[...new Set(names)].join(", ")}`);
+    for (const c of list) {
+      const stereo = c.stereo && c.stereo !== "interface" ? ` <<${c.stereo}>>` : "";
+      lines.push(`${c.kw} "${c.label}" as ${c.uid}${stereo} {`, ...c.fields.map(member), ...c.methods.map(member), "}");
     }
     if (pkg) lines.push("}");
     lines.push("");
   }
-  if (external.size) {
+  if (d.external.length) {
     lines.push("' Android / library classes the app builds on");
-    for (const e of [...external].sort()) lines.push(`class ${e} <<library>> #EEEEEE`);
+    for (const e of d.external) lines.push(`class ${e} <<library>> #EEEEEE`);
     lines.push("");
   }
+  const arrow = {
+    extends: (r) => `${r.to} <|-- ${r.from}`,
+    implements: (r) => `${r.to} <|.. ${r.from}`,
+    inner: (r) => `${r.from} +-- ${r.to}`,
+    has: (r) => `${r.from} --> ${r.to} : ${r.label}`,
+    opens: (r) => `${r.from} ..> ${r.to} : ${r.label}`,
+  };
   lines.push("' inheritance, interfaces, inner classes and fields");
-  lines.push(...new Set(rel));
-
-  // which screen opens which (dialogs made from a layout aren't classes, so they're left out)
-  const uidOf = (name) => (all.find((x) => x.name === name && x.label === name) || {}).uid;
-  const opens = new Map();  // "A ..> B" -> opened by a tap at least once?
-  for (const e of model.edges) {
-    const a = uidOf(e.from), b = uidOf(e.to);
-    if (!a || !b || a === b) continue;
-    const key = `${a} ..> ${b}`;
-    opens.set(key, opens.get(key) || !e.auto);
-  }
-  if (opens.size) {
-    lines.push("", "' navigation: which screen opens which");
-    for (const [key, tapped] of opens) lines.push(`${key} : ${tapped ? "opens" : "opens on its own"}`);
-  }
+  lines.push(...new Set(d.rels.filter((r) => r.type !== "opens").map((r) => arrow[r.type](r))));
+  const opens = d.rels.filter((r) => r.type === "opens");
+  if (opens.length) lines.push("", "' navigation: which screen opens which", ...opens.map((r) => arrow.opens(r)));
   lines.push("@enduml", "");
   return lines.join("\n");
 }
 
-function downloadUml() {
-  if (!app) return;
-  const text = buildUml(app.model, app.name);
-  const blob = new Blob([text], { type: "text/plain" });
+// ---------------------------------------------------------------- PDF (drawn with Graphviz, in the browser)
+
+const GRAPHVIZ_URL = "https://cdn.jsdelivr.net/npm/@hpcc-js/wasm-graphviz@1.29.2/dist/index.js";
+const JSPDF_URL = "https://cdn.jsdelivr.net/npm/jspdf@4.2.1/+esm";
+const SVG2PDF_URL = "https://cdn.jsdelivr.net/npm/svg2pdf.js@2.8.1/+esm";
+
+function dotEsc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+const STEREO_COLOR = { Activity: "#E9E7FF", Fragment: "#E1F3FB", Dialog: "#FFF0DC", Adapter: "#E6F6EA", interface: "#F2F2F2", object: "#F2F2F2" };
+
+function dotHeader(title, rankdir) {
+  return [
+    "digraph UML {",
+    `  graph [rankdir=${rankdir}, fontname="Helvetica", nodesep=0.35, ranksep=0.6, labelloc=t, fontsize=22, label=<${title}<br/> >, pad=0.4, newrank=true];`,
+    `  node [shape=plain, fontname="Helvetica", fontsize=10];`,
+    `  edge [fontname="Helvetica", fontsize=9, color="#555555", fontcolor="#444444"];`,
+  ];
+}
+
+// page 1: classes with their members, inheritance, interfaces, inner classes and fields
+function buildClassDot(d, projectName) {
+  const out = dotHeader(`<b>${dotEsc(projectName)}</b> - class diagram`, "BT");
+  const memberRow = (m) => {
+    let t = dotEsc(`${m.vis} ${m.text}`);
+    if (m.isAbstract) t = `<i>${t}</i>`;
+    if (m.isStatic) t = `<u>${t}</u>`;
+    return `<tr><td align="left">${t}</td></tr>`;
+  };
+  const section = (rows) => `<tr><td align="left"><table border="0" cellborder="0" cellspacing="0" cellpadding="1">${rows.length ? rows.map(memberRow).join("") : "<tr><td> </td></tr>"}</table></td></tr>`;
+  const node = (c) => {
+    const name = c.kw === "abstract class" ? `<i><b>${dotEsc(c.label)}</b></i>` : `<b>${dotEsc(c.label)}</b>`;
+    const head = `${c.stereo ? `<font point-size="8">${dotEsc(`<<${c.stereo}>>`)}</font><br/>` : ""}${name}`;
+    return `    ${c.uid} [label=<<table border="1" cellborder="1" cellspacing="0" cellpadding="4" color="#444444" bgcolor="#FFFFFF">` +
+      `<tr><td bgcolor="${STEREO_COLOR[c.stereo] || "#FFFFFF"}">${head}</td></tr>${section(c.fields)}${section(c.methods)}</table>>];`;
+  };
+  let n = 0;
+  for (const [pkg, list] of byPackage(d.classes)) {
+    if (pkg) out.push(`  subgraph cluster_${n++} {`, `    label=<${dotEsc(pkg)}>; labeljust=l; fontsize=11; style=rounded; color="#BBBBBB"; fontcolor="#666666";`);
+    for (const c of list) out.push(node(c));
+    if (pkg) out.push("  }");
+  }
+  for (const e of d.external) {
+    out.push(`  ${e} [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="5" color="#999999" bgcolor="#EEEEEE"><tr><td><font point-size="8">&lt;&lt;library&gt;&gt;</font><br/>${dotEsc(e)}</td></tr></table>>];`);
+  }
+
+  // many classes under one parent would sit in one very long row: stagger them over a few rows
+  const rels = d.rels.filter((r) => r.type !== "opens");
+  const kids = new Map();
+  for (const r of rels) if (r.type === "extends" || r.type === "implements") {
+    if (!kids.has(r.to)) kids.set(r.to, []);
+    kids.get(r.to).push(r.from);
+  }
+  const minlen = new Map();
+  for (const list of kids.values()) {
+    const rows = Math.min(4, Math.ceil(list.length / 5));
+    list.forEach((k, i) => minlen.set(k, 1 + (i % rows)));
+  }
+  const seen = new Set();
+  for (const r of rels) {
+    const key = `${r.type}:${r.from}:${r.to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const ml = minlen.get(r.from) || 1;
+    if (r.type === "extends") out.push(`  ${r.from} -> ${r.to} [arrowhead=empty, arrowsize=1.2, minlen=${ml}];`);
+    if (r.type === "implements") out.push(`  ${r.from} -> ${r.to} [arrowhead=empty, arrowsize=1.2, style=dashed, minlen=${ml}];`);
+    if (r.type === "inner") out.push(`  ${r.to} -> ${r.from} [arrowhead=odot, color="#888888"];`);
+    if (r.type === "has") out.push(`  ${r.from} -> ${r.to} [arrowhead=vee, label=<${dotEsc(r.label)}>];`);
+  }
+  // classes with no links at all: stack them in columns rather than one row
+  const linked = new Set(rels.flatMap((r) => [r.from, r.to]));
+  const loose = d.classes.filter((c) => !linked.has(c.uid)).map((c) => c.uid);
+  const cols = Math.max(1, Math.ceil(loose.length / 3));
+  for (let i = cols; i < loose.length; i++) out.push(`  ${loose[i - cols]} -> ${loose[i]} [style=invis];`);
+  out.push("}");
+  return out.join("\n");
+}
+
+// page 2: which screen opens which
+function buildNavDot(d, projectName) {
+  const out = dotHeader(`<b>${dotEsc(projectName)}</b> - which screen opens which`, "TB");
+  const opens = d.rels.filter((r) => r.type === "opens");
+  const used = new Set(opens.flatMap((r) => [r.from, r.to]));
+  for (const c of d.classes) {
+    if (!used.has(c.uid)) continue;
+    out.push(`  ${c.uid} [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="6" color="#444444" bgcolor="${STEREO_COLOR[c.stereo] || "#FFFFFF"}"><tr><td><font point-size="8">${dotEsc(`<<${c.stereo || "class"}>>`)}</font><br/><b>${dotEsc(c.label)}</b></td></tr></table>>];`);
+  }
+  for (const r of opens) out.push(`  ${r.from} -> ${r.to} [arrowhead=vee${r.label === "opens" ? "" : ", style=dashed"}, color="#6C63FF"];`);
+  out.push(`  key [label=<<table border="0" cellspacing="2"><tr><td align="left">solid: opened by a tap</td></tr><tr><td align="left">dashed: opens on its own</td></tr></table>>, fontcolor="#6C63FF"];`);
+  out.push("}");
+  return out.join("\n");
+}
+
+// draws each page as SVG with Graphviz, then puts the pages in a PDF - all in this page, nothing is sent anywhere
+async function buildUmlPdf(model, projectName) {
+  const [{ Graphviz }, { jsPDF }, { svg2pdf }] = await Promise.all([import(GRAPHVIZ_URL), import(JSPDF_URL), import(SVG2PDF_URL)]);
+  const graphviz = await Graphviz.load();
+  const d = umlModel(model);
+  const pages = [buildClassDot(d, projectName)];
+  if (d.rels.some((r) => r.type === "opens")) pages.push(buildNavDot(d, projectName));
+  let doc = null;
+  for (const dot of pages) {
+    const svg = new DOMParser().parseFromString(graphviz.dot(dot), "image/svg+xml").documentElement;
+    const w = parseFloat(svg.getAttribute("width")), h = parseFloat(svg.getAttribute("height"));  // points
+    const orientation = w > h ? "landscape" : "portrait";
+    if (!doc) doc = new jsPDF({ orientation, unit: "pt", format: [w, h], compress: true });
+    else doc.addPage([w, h], orientation);
+    const holder = document.createElement("div");
+    holder.style.cssText = "position:fixed;left:-99999px;top:0";
+    holder.append(svg);
+    document.body.append(holder);
+    try { await svg2pdf(svg, doc, { x: 0, y: 0, width: w, height: h }); } finally { holder.remove(); }
+  }
+  doc.setProperties({ title: `${projectName} - UML`, creator: "Screen Map" });
+  return doc.output("blob");
+}
+
+function saveBlob(blob, name) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${app.name.replace(/[^\w.-]+/g, "_") || "project"}.puml`;
+  a.download = name;
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function umlFileName(ext) { return `${(app.name || "project").replace(/[^\w.-]+/g, "_")}-uml.${ext}`; }
+
+async function downloadUmlPdf(btn) {
+  if (!app || btn.disabled) return;
+  const label = btn.querySelector("span"), old = label.textContent;
+  btn.disabled = true;
+  label.textContent = "Drawing diagram…";
+  try {
+    saveBlob(await buildUmlPdf(app.model, app.name), umlFileName("pdf"));
+  } catch (err) {
+    console.error(err);
+    alert("Couldn't make the PDF. The drawing tools load from the internet, so check your connection. You can still download the .puml file.");
+  } finally {
+    btn.disabled = false;
+    label.textContent = old;
+  }
+}
+
+function downloadUmlSource() {
+  if (!app) return;
+  saveBlob(new Blob([buildUml(app.model, app.name)], { type: "text/plain" }), umlFileName("puml"));
 }

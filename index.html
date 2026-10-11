@@ -84,10 +84,13 @@
       <div class="gallery" id="gallery"></div>
     </section>
 
-    <button class="uml-btn" id="umlBtn" title="Download a UML class diagram of your code (PlantUML .puml file)" hidden>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>
-      <span>Download UML diagram</span>
-    </button>
+    <div class="uml-bar" id="umlBar" hidden>
+      <button class="uml-btn" id="umlBtn" title="Download a UML class diagram of your code as a PDF">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>
+        <span>Download UML diagram (PDF)</span>
+      </button>
+      <button class="uml-src" id="umlSrc" title="The same diagram as an editable PlantUML file">.puml</button>
+    </div>
 
     <div class="viewer" id="viewer" hidden>
       <div class="viewer-card" id="viewerCard" role="dialog" aria-modal="true">

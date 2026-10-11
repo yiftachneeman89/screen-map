@@ -34,7 +34,7 @@ async function load(items) {
     $("projectName").textContent = raw.name;
     $("tabs").hidden = false;
     $("topActions").hidden = false;
-    $("umlBtn").hidden = false;
+    $("umlBar").hidden = false;
     document.title = `${raw.name} · Screen Map`;
     $("loadingText").textContent = "Drawing screens…";
     // text is measured for ConstraintLayout/RelativeLayout, so the fonts must be there first
@@ -628,7 +628,7 @@ $("openOther").onclick = () => {
   app = null;
   $("tabs").hidden = true;
   $("topActions").hidden = true;
-  $("umlBtn").hidden = true;
+  $("umlBar").hidden = true;
   closeViewer();
   $("projectName").textContent = "Your Android app as a flow chart";
   document.title = "Screen Map";
@@ -636,7 +636,8 @@ $("openOther").onclick = () => {
 };
 for (const b of document.querySelectorAll(".tab-btn")) b.onclick = () => (b.dataset.view === "flow" ? showFlow() : showGallery());
 $("viewerClose").onclick = closeViewer;
-$("umlBtn").onclick = downloadUml;
+$("umlBtn").onclick = () => downloadUmlPdf($("umlBtn"));
+$("umlSrc").onclick = downloadUmlSource;
 $("viewerBody").addEventListener("click", (e) => {
   const go = e.target.closest("[data-go]");
   if (!go) return;

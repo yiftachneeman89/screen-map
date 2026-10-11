@@ -346,12 +346,15 @@ details.code pre { margin: 8px 0 0; background: var(--canvas); border: 1px solid
 }
 
 /* ---------------------------------------------------------------- UML download */
-.uml-btn {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 6;
+.uml-bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 6; display: flex; gap: 6px; }
+.uml-btn, .uml-src {
   display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px;
   border: 1px solid rgba(139,133,255,.5); background: #24223a; color: #e4e2ff; font-weight: 600; font-size: 14px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); white-space: nowrap;
 }
+.uml-src { padding: 0 14px; font: 500 12.5px var(--mono); color: var(--text-2); border-color: var(--stroke-2); background: var(--surface); }
 .uml-btn:hover { background: #2e2b4d; border-color: var(--accent); }
+.uml-src:hover { color: var(--text); border-color: var(--accent); }
+.uml-btn:disabled { opacity: .7; cursor: progress; }
 .uml-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-@media (max-width: 900px) { .uml-btn { bottom: 64px; } }
+@media (max-width: 900px) { .uml-bar { bottom: 64px; } }

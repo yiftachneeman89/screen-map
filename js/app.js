@@ -42,6 +42,9 @@ async function load(items) {
     await Promise.all(["400", "500", "700"].map((w) => document.fonts.load(`${w} 16px Roboto`).catch(() => {})));
     await document.fonts.ready;
     showFlow();
+    // Review Deck links to one screen: /screen-map/?screen=<id>
+    const want = new URLSearchParams(location.search).get("screen");
+    if (want && model.screens[want]) { app.chart.focusNode(want); openScreen(want); }
   } catch (err) {
     console.error(err);
     show("landing");
@@ -56,6 +59,7 @@ function saveSummary(name, model) {
     const list = Object.values(model.screens);
     const count = (k) => list.filter((s) => s.kind === k && !s.dialogOf).length;
     const start = list.find((s) => s.launcher);
+    const unreachable = list.filter((s) => !s.launcher && !s.dialogOf && !s.host && !model.edges.some((e) => e.to === s.id && e.from !== s.id));
     localStorage.setItem("sm.summary", JSON.stringify({
       project: name, screens: list.length, activities: count("activity"), fragments: count("fragment"),
       dialogs: list.filter((s) => s.kind === "dialog" || s.dialogOf).length,
@@ -63,7 +67,8 @@ function saveSummary(name, model) {
       buttons: list.reduce((n, s) => n + s.handlers.length, 0),
       autoLinks: new Set(model.edges.filter((e) => e.auto).map((e) => `${e.from}>${e.to}`)).size,
       layouts: Object.keys(app?.res?.files?.layout || {}).length,
-      unreachable: list.filter((s) => !s.launcher && !s.dialogOf && !s.host && !model.edges.some((e) => e.to === s.id && e.from !== s.id)).map(friendlyName),
+      unreachable: unreachable.map(friendlyName),
+      unreachableIds: unreachable.map((s) => s.id),
       start: start ? friendlyName(start) : null, at: Date.now(),
       // a small version of the flow chart for the Review Deck card
       graph: (() => {
@@ -75,7 +80,8 @@ function saveSummary(name, model) {
           const k = `${a}>${b}`;
           pairs.set(k, [a, b, (pairs.get(k)?.[2] ?? true) && !!e.auto]);
         }
-        return { nodes: list.map((s) => ({ n: friendlyName(s), k: s.dialogOf ? "dialog" : s.kind, s: !!s.launcher })), edges: [...pairs.values()] };
+        // id and source file let Review Deck link a screen to its review and its quiz
+        return { nodes: list.map((s) => ({ n: friendlyName(s), k: s.dialogOf ? "dialog" : s.kind, s: !!s.launcher, id: s.id, f: s.file || null, b: s.handlers.length })), edges: [...pairs.values()] };
       })(),
     }));
   } catch {}

@@ -18,12 +18,64 @@
   --text: #141414;
   --text-2: #555550;
   --text-3: #8a8a83;
+  --on-accent: #ffffff;
 
   --code-bg: #1b1b1f;
   --radius: 16px;
   --ui: Inter, "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
 }
+
+/* Black mode: chosen with the White/Black switch on Review Deck (/review-deck/theme.js).
+   The rendered phones keep the app's own colours. */
+:root[data-theme="dark"] {
+  --bg: #0e0e0f;
+  --canvas: #121214;
+  --surface: #18181a;
+  --raised: #242427;
+  --stroke: #2a2a2d;
+  --stroke-2: #3a3a3e;
+
+  --accent: #f4f3ef;
+  --accent-muted: rgba(255, 255, 255, .1);
+  --red: #ef4b40;
+  --blue: #5b8def;
+  --now: #f07a2a;
+  --success: #3fbf6f;
+  --error: #ef4b40;
+
+  --text: #f4f3ef;
+  --text-2: #b4b3ad;
+  --text-3: #85847e;
+  --on-accent: #0e0e0f;
+
+  --code-bg: #111113;
+  color-scheme: dark;
+}
+:root[data-theme="dark"] .brand-logo { border-radius: 10px; box-shadow: 0 0 0 1px var(--stroke-2); }
+:root[data-theme="dark"] .drop:hover, :root[data-theme="dark"] .drop.over { background: #1d1d20; }
+:root[data-theme="dark"] .canvas { background-image: radial-gradient(circle, #2c2c30 1px, transparent 1px); }
+:root[data-theme="dark"] .group-frame { border-color: #46464b; background: rgba(255,255,255,.025); }
+:root[data-theme="dark"] .edges g:not(.hl) .line { stroke: #6e6e72; }
+:root[data-theme="dark"] .edge-label { background: var(--surface); }
+:root[data-theme="dark"] .edge-label.hl { background: rgba(239,75,64,.16); }
+:root[data-theme="dark"] .node { box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+:root[data-theme="dark"] .node.kind-activity { border-left-color: #f4f3ef; }
+:root[data-theme="dark"] .node.kind-fragment { border-left-color: #5b8def; }
+:root[data-theme="dark"] .node.kind-dialog { border-left-color: #f07a2a; }
+:root[data-theme="dark"] .kind-activity { color: #f4f3ef; }
+:root[data-theme="dark"] .kind-fragment { color: #5b8def; }
+:root[data-theme="dark"] .kind-dialog { color: #f07a2a; }
+:root[data-theme="dark"] .legend, :root[data-theme="dark"] .zoom-ctl { background: rgba(24,24,26,.94); }
+:root[data-theme="dark"] .legend i { border-top-color: #6e6e72; }
+:root[data-theme="dark"] .viewer-card { box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+:root[data-theme="dark"] .b-card:hover { background: rgba(255,255,255,.04); }
+:root[data-theme="dark"] .b-card.active { background: rgba(240,122,42,.1); }
+:root[data-theme="dark"] .b-desc { color: #d8d7d1; }
+:root[data-theme="dark"] a.go { text-decoration-color: rgba(239,75,64,.45); }
+:root[data-theme="dark"] a.go:hover { color: #ff7a70; }
+:root[data-theme="dark"] .uml-btn { box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+:root[data-theme="dark"] .uml-btn:hover { background: #ffffff; border-color: #ffffff; }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -57,7 +109,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--raised); pad
 
 .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--stroke); border-radius: 12px; padding: 4px; }
 .tab-btn { border: 0; background: none; padding: 6px 14px; border-radius: 8px; color: var(--text-2); font-weight: 500; }
-.tab-btn.active { background: var(--accent); color: #fff; }
+.tab-btn.active { background: var(--accent); color: var(--on-accent); }
 
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--stroke); border-radius: 10px; padding: 0 10px; height: 36px; }
@@ -350,7 +402,7 @@ details.code pre { margin: 8px 0 0; background: var(--code-bg); border: 1px soli
 .uml-bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 6; display: flex; gap: 6px; }
 .uml-btn, .uml-src {
   display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px;
-  border: 1px solid var(--accent); background: var(--accent); color: #fff; font-weight: 600; font-size: 14px;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: 14px;
   box-shadow: 0 8px 24px rgba(0,0,0,.18); white-space: nowrap;
 }
 .uml-src { padding: 0 14px; font: 500 12.5px var(--mono); color: var(--text-2); border-color: var(--stroke-2); background: var(--surface); }
@@ -363,3 +415,5 @@ details.code pre { margin: 8px 0 0; background: var(--code-bg); border: 1px soli
 /* link back to Review Deck (shown when you came from there) */
 .deck-back { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 11px; margin-right: 4px; border-radius: 999px; border: 1px solid #cfccc2; background: #fff; color: #141414; font: 600 12.5px Inter, system-ui, sans-serif; text-decoration: none; white-space: nowrap; }
 .deck-back:hover { border-color: #141414; }
+:root[data-theme="dark"] .deck-back { border-color: #3a3a3e; background: #18181a; color: #f4f3ef; }
+:root[data-theme="dark"] .deck-back:hover { border-color: #f4f3ef; }
